@@ -5,12 +5,20 @@ from __future__ import unicode_literals
 import copy
 import json
 import math
-import mmap
 import os
 import re
 import struct
 import time
 import types
+
+_MULTIPROC_DIR_ENVVAR = 'prometheus_multiproc_dir'
+
+try:
+    import mmap
+except ImportError, e:
+    # Raise the error only if enabled (and not available).
+    if _MULTIPROC_DIR_ENVVAR in os.environ:
+        raise e
 
 try:
     from BaseHTTPServer import BaseHTTPRequestHandler
@@ -23,6 +31,7 @@ from timeit import default_timer
 
 from .decorator import decorate
 
+_MULTIPROC_DIR = os.getenv(_MULTIPROC_DIR_ENVVAR)
 _METRIC_NAME_RE = re.compile(r'^[a-zA-Z_:][a-zA-Z0-9_:]*$')
 _METRIC_LABEL_NAME_RE = re.compile(r'^[a-zA-Z_:][a-zA-Z0-9_:]*$')
 _RESERVED_METRIC_LABEL_NAME_RE = re.compile(r'^__.*$')
@@ -344,8 +353,7 @@ def _MultiProcessValue(__pid=os.getpid()):
                 file_prefix = typ
             with files_lock:
                 if file_prefix not in files:
-                    filename = os.path.join(
-                            os.environ['prometheus_multiproc_dir'], '{0}_{1}.db'.format(file_prefix, pid))
+                    filename = os.path.join(_MULTIPROC_DIR, '{0}_{1}.db'.format(file_prefix, pid))
                     files[file_prefix] = _MmapedDict(filename)
             self._file = files[file_prefix]
             self._key = json.dumps((metric_name, name, labelnames, labelvalues))
@@ -373,7 +381,7 @@ def _MultiProcessValue(__pid=os.getpid()):
 # This needs to be chosen before the first metric is constructed,
 # and as that may be in some arbitrary library the user/admin has
 # no control over we use an enviroment variable.
-if 'prometheus_multiproc_dir' in os.environ:
+if _MULTIPROC_DIR:
     _ValueClass = _MultiProcessValue()
 else:
     _ValueClass = _MutexValue
